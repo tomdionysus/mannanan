@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-find_package(yaml-cpp 0.9 CONFIG REQUIRED)
+find_package(yaml-cpp 0.8 CONFIG REQUIRED)
 
 add_library(manannan_api INTERFACE)
 target_include_directories(manannan_api INTERFACE
