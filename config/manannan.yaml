@@ -1,5 +1,6 @@
 manannan:
   cadence: 5m
+  log_level: info
   source: amazon_check_ip
   registry: aws_route53
   plugin_directories:
@@ -21,4 +22,3 @@ registry:
       access_key_id: ${AWS_ACCESS_KEY_ID}
       secret_access_key: ${AWS_SECRET_ACCESS_KEY}
       session_token: ${AWS_SESSION_TOKEN}
-

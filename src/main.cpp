@@ -11,6 +11,7 @@ int main(int argc, char** argv) {
   auto logger = std::make_shared<manannan::loggers::LoggerStdIO>(manannan::loggers::INFO);
   try {
     const auto config = manannan::load_config(argv[1]);
+    logger->set_level(config.log_level);
     manannan::PluginLoader loader(logger);
     loader.scan(config.plugin_directories);
     auto source_loaded = loader.create(manannan::PluginType::source, config.source_plugin, config.document);
@@ -18,8 +19,7 @@ int main(int argc, char** argv) {
     auto* source = dynamic_cast<manannan::SourcePlugin*>(&source_loaded.instance());
     auto* registry = dynamic_cast<manannan::RegistryPlugin*>(&registry_loaded.instance());
     if (!source || !registry) throw std::runtime_error("plugin returned an object of the wrong type");
-    logger->info("Manannan started");
+    logger->debug("Manannan started");
     return manannan::Service(*source, *registry, config.cadence, logger).run();
   } catch (const std::exception& error) { logger->error(error.what()); return 1; }
 }
-

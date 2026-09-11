@@ -22,11 +22,16 @@ Service::Service(SourcePlugin& source, RegistryPlugin& registry, std::chrono::mi
                  std::shared_ptr<loggers::Logger> logger)
     : source_private(source), registry_private(registry), cadence_private(cadence), logger_private(std::move(logger)) {}
 void Service::reconcile() {
+  logger_private->debug("checking public IP");
+  logger_private->debug("loading IP from source");
   const auto desired = source_private.get_value();
+  logger_private->debug("checking registered IP");
+  logger_private->debug("loading IP from registry");
   const auto registered = registry_private.get_value();
   if (desired == registered) { logger_private->debug("registered value is current: " + desired); return; }
-  logger_private->info("registered value differs; applying " + desired);
+  logger_private->debug("registered value differs; setting " + desired + " in registry");
   registry_private.set_value(desired);
+  logger_private->info("set new IP to " + desired);
 }
 int Service::run() {
   shutdown_requested = 0;
@@ -61,7 +66,7 @@ int Service::run() {
     const int result = pselect(0, nullptr, nullptr, nullptr, &timeout, &wait_mask);
     if (result < 0 && errno != EINTR) throw std::system_error(errno, std::generic_category());
   }
-  logger_private->info("shutdown requested");
+  logger_private->debug("shutdown requested");
   return 0;
 }
 }

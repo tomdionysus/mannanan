@@ -28,6 +28,7 @@ Plugin& LoadedPlugin::instance() const { return *instance_private; }
 PluginLoader::PluginLoader(std::shared_ptr<loggers::Logger> logger) : logger_private(std::move(logger)) {}
 void PluginLoader::scan(const std::vector<std::filesystem::path>& directories) {
   for (const auto& directory : directories) {
+    logger_private->debug("scanning plugin directory " + directory.string());
     std::error_code error;
     if (!std::filesystem::is_directory(directory, error)) { logger_private->warn("plugin directory unavailable: " + directory.string()); continue; }
     for (const auto& entry : std::filesystem::directory_iterator(directory)) {
@@ -52,6 +53,7 @@ void PluginLoader::scan(const std::vector<std::filesystem::path>& directories) {
 LoadedPlugin PluginLoader::create(PluginType type, const std::string& name, const YAML::Node& document) const {
   const auto found = discovered_private.find({type, name});
   if (found == discovered_private.end()) throw std::runtime_error("plugin not found: " + name);
+  logger_private->debug("loading plugin " + name + " from " + found->second.path.string());
   void* library = dlopen(found->second.path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!library) throw std::runtime_error("cannot load plugin " + name + ": " + dlerror());
   auto get_descriptor = reinterpret_cast<GetPluginDescriptor>(dlsym(library, MANANNAN_PLUGIN_ENTRYPOINT));
@@ -63,6 +65,7 @@ LoadedPlugin PluginLoader::create(PluginType type, const std::string& name, cons
   Plugin* instance = nullptr;
   try { instance = descriptor->create(node, scoped_logger); } catch (...) { dlclose(library); throw; }
   if (!instance) { dlclose(library); throw std::runtime_error("plugin creation failed: " + name); }
+  logger_private->info("loaded plugin " + name);
   return LoadedPlugin(library, descriptor, instance);
 }
 }

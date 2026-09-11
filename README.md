@@ -39,6 +39,11 @@ least-privilege IAM access key using `AWS_ACCESS_KEY_ID` and
 The IAM identity needs `route53:ListResourceRecordSets` and
 `route53:ChangeResourceRecordSets` for the hosted zone.
 
+Set `manannan.log_level` to `debug`, `info`, `warn`, or `error`. The
+`LOG_LEVEL` environment variable accepts the same values and overrides the
+configuration file. At `info`, Manannan reports plugin loads and successful
+address changes; routine checks and plugin operations are logged at `debug`.
+
 The core blocks in `pselect(2)` until the next monotonic deadline. There is no
 polling sleep, and `SIGINT` and `SIGTERM` wake it immediately on either Linux or
 macOS.
@@ -53,4 +58,3 @@ yaml-cpp build. The exported discovery symbol itself has C linkage.
 
 The supplied logger classes have been retained and moved to the
 `manannan::loggers` namespace.
-

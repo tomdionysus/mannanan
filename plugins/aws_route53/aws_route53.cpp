@@ -79,10 +79,15 @@ class AwsRoute53 final : public manannan::RegistryPlugin {
     credentials_private.session_token = configured_secret(credential_node, "session_token", "AWS_SESSION_TOKEN");
     if (credentials_private.access_key_id.empty() || credentials_private.secret_access_key.empty())
       throw std::runtime_error("AWS access key ID and secret access key are required");
+    logger_private->debug("initialising Route 53 registry");
     curl_global_init(CURL_GLOBAL_DEFAULT);
   }
 
+  ~AwsRoute53() override { logger_private->debug("destroy()"); }
+
   std::string get_value() override {
+    logger_private->debug("get_value()");
+    logger_private->debug("reading A record " + name_private);
     const auto query = "maxitems=1&name=" + manannan::aws::url_encode(name_private) + "&type=A";
     const auto response = request("GET", read_path(), query, "");
     const std::regex set_pattern("<ResourceRecordSet>([\\s\\S]*?)</ResourceRecordSet>");
@@ -95,12 +100,19 @@ class AwsRoute53 final : public manannan::RegistryPlugin {
           xml_unescape(name_match[1].str()) == name_private &&
           set.find("<Type>A</Type>") != std::string::npos &&
           std::regex_search(set, value_match, std::regex("<ResourceRecord>\\s*<Value>([^<]+)</Value>")))
-        return xml_unescape(value_match[1].str());
+        {
+          const auto value = xml_unescape(value_match[1].str());
+          logger_private->debug("registered address is " + value);
+          return value;
+        }
     }
+    logger_private->debug("A record is not currently set");
     return {};
   }
 
   void set_value(const std::string& value) override {
+    logger_private->debug("set_value(" + value + ")");
+    logger_private->debug("setting A record " + name_private + " to " + value);
     const auto payload = std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") +
         "<ChangeResourceRecordSetsRequest xmlns=\"https://route53.amazonaws.com/doc/2013-04-01/\">"
         "<ChangeBatch><Changes><Change><Action>UPSERT</Action><ResourceRecordSet><Name>" +
@@ -109,7 +121,7 @@ class AwsRoute53 final : public manannan::RegistryPlugin {
         "</Value></ResourceRecord></ResourceRecords></ResourceRecordSet></Change></Changes></ChangeBatch>"
         "</ChangeResourceRecordSetsRequest>";
     (void)request("POST", write_path(), "", payload);
-    logger_private->info("Route 53 accepted the update for " + name_private);
+    logger_private->debug("Route 53 accepted the update for " + name_private);
   }
 
  private:
@@ -120,6 +132,7 @@ class AwsRoute53 final : public manannan::RegistryPlugin {
 
   std::string request(const std::string& method, const std::string& path,
                       const std::string& query, const std::string& payload) const {
+    logger_private->debug(method + " https://" + host_private + path);
     const auto signed_request = manannan::aws::sign_v4(
         method, host_private, path, query, payload, credentials_private, region_private, "route53");
     const auto url = "https://" + host_private + path + (query.empty() ? "" : "?" + query);
@@ -170,6 +183,7 @@ class AwsRoute53 final : public manannan::RegistryPlugin {
 };
 
 manannan::Plugin* create(const YAML::Node& config, std::shared_ptr<manannan::loggers::Logger> logger) {
+  logger->debug("create()");
   return new AwsRoute53(config, std::move(logger));
 }
 void destroy(manannan::Plugin* plugin) { delete plugin; }

@@ -19,9 +19,13 @@ class AmazonCheckIp final : public manannan::SourcePlugin {
       : endpoint_private(config["endpoint"].as<std::string>("https://checkip.amazonaws.com/")),
         timeout_private(config["timeout_seconds"].as<long>(10)), logger_private(std::move(logger)) {
     if (timeout_private <= 0) throw std::runtime_error("timeout_seconds must be positive");
+    logger_private->debug("initialising Amazon Check IP source");
     curl_global_init(CURL_GLOBAL_DEFAULT);
   }
+  ~AmazonCheckIp() override { logger_private->debug("destroy()"); }
   std::string get_value() override {
+    logger_private->debug("get_value()");
+    logger_private->debug("requesting public IP from " + endpoint_private);
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) throw std::runtime_error("cannot initialise HTTP client");
     std::string response;
@@ -46,6 +50,7 @@ class AmazonCheckIp final : public manannan::SourcePlugin {
   std::shared_ptr<manannan::loggers::Logger> logger_private;
 };
 manannan::Plugin* create(const YAML::Node& config, std::shared_ptr<manannan::loggers::Logger> logger) {
+  logger->debug("create()");
   return new AmazonCheckIp(config, std::move(logger));
 }
 void destroy(manannan::Plugin* plugin) { delete plugin; }
@@ -55,4 +60,3 @@ const manannan::PluginDescriptor descriptor{manannan::plugin_abi_version, manann
 extern "C" __attribute__((visibility("default"))) const manannan::PluginDescriptor* manannan_plugin_descriptor() {
   return &descriptor;
 }
-
