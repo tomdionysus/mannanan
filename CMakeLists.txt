@@ -9,13 +9,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-find_package(yaml-cpp REQUIRED)
+find_package(yaml-cpp 0.9 CONFIG REQUIRED)
 
 add_library(manannan_api INTERFACE)
 target_include_directories(manannan_api INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_link_libraries(manannan_api INTERFACE yaml-cpp)
+target_link_libraries(manannan_api INTERFACE yaml-cpp::yaml-cpp)
 
 add_library(manannan_logging STATIC
   src/loggers/logger_scoped.cpp
@@ -37,7 +37,9 @@ add_subdirectory(plugins/aws_route53)
 install(TARGETS manannan RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 install(DIRECTORY include/manannan DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES config/manannan.yaml DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manannan)
-install(FILES packaging/manannan.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  install(FILES packaging/manannan.service DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/system)
+endif()
 
 if(BUILD_TESTING)
   add_executable(manannan_tests

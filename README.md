@@ -1,6 +1,6 @@
 # Manannan
 
-Manannan is a small Linux service which periodically reconciles a value from a
+Manannan is a small Linux and macOS service which periodically reconciles a value from a
 runtime-loaded source plugin with a runtime-loaded registry plugin. Its initial
 plugins discover the public IPv4 address through Amazon Check IP and maintain an
 AWS Route 53 `A` record.
@@ -14,7 +14,7 @@ therefore does not leak into the service core.
 ## Dependencies
 
 - A C++20 compiler and CMake 3.20+
-- yaml-cpp
+- yaml-cpp 0.9+
 - libcurl
 - OpenSSL libcrypto
 
@@ -39,8 +39,9 @@ least-privilege IAM access key using `AWS_ACCESS_KEY_ID` and
 The IAM identity needs `route53:ListResourceRecordSets` and
 `route53:ChangeResourceRecordSets` for the hosted zone.
 
-The core blocks in `poll(2)` over `timerfd` and `signalfd`; there is no polling
-sleep. `SIGINT` and `SIGTERM` wake it immediately.
+The core blocks in `pselect(2)` until the next monotonic deadline. There is no
+polling sleep, and `SIGINT` and `SIGTERM` wake it immediately on either Linux or
+macOS.
 
 ## Plugin contract
 

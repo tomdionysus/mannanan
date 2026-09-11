@@ -1,29 +1,21 @@
 #include "manannan/service.h"
 #include <cerrno>
-#include <cstring>
+#include <csignal>
 #include <stdexcept>
 #include <system_error>
-#include <poll.h>
-#include <signal.h>
-#include <sys/signalfd.h>
-#include <sys/timerfd.h>
-#include <unistd.h>
+#include <sys/select.h>
 namespace manannan {
 namespace {
-class FileDescriptor {
- public:
-  explicit FileDescriptor(int descriptor) : descriptor_private(descriptor) {
-    if (descriptor_private < 0) throw std::system_error(errno, std::generic_category());
-  }
-  ~FileDescriptor() { if (descriptor_private >= 0) close(descriptor_private); }
-  int get() const { return descriptor_private; }
- private: int descriptor_private;
-};
-itimerspec periodic_timer(std::chrono::milliseconds cadence) {
-  const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(cadence);
-  const auto remainder = cadence - seconds;
-  timespec value{seconds.count(), std::chrono::duration_cast<std::chrono::nanoseconds>(remainder).count()};
-  return {value, value};
+volatile std::sig_atomic_t shutdown_requested{};
+
+extern "C" void request_shutdown(int) {
+  shutdown_requested = 1;
+}
+
+timespec to_timespec(std::chrono::steady_clock::duration duration) {
+  const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+  const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(nanoseconds);
+  return {seconds.count(), (nanoseconds - seconds).count()};
 }
 }
 Service::Service(SourcePlugin& source, RegistryPlugin& registry, std::chrono::milliseconds cadence,
@@ -37,23 +29,39 @@ void Service::reconcile() {
   registry_private.set_value(desired);
 }
 int Service::run() {
-  sigset_t signals; sigemptyset(&signals); sigaddset(&signals, SIGINT); sigaddset(&signals, SIGTERM);
-  if (pthread_sigmask(SIG_BLOCK, &signals, nullptr) != 0) throw std::runtime_error("cannot block shutdown signals");
-  FileDescriptor signal_fd(signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK));
-  FileDescriptor timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC));
-  const auto timer = periodic_timer(cadence_private);
-  if (timerfd_settime(timer_fd.get(), 0, &timer, nullptr) < 0) throw std::system_error(errno, std::generic_category());
-  try { reconcile(); } catch (const std::exception& error) { logger_private->error(error.what()); }
-  pollfd descriptors[2]{{signal_fd.get(), POLLIN, 0}, {timer_fd.get(), POLLIN, 0}};
-  while (true) {
-    const int result = poll(descriptors, 2, -1);
-    if (result < 0) { if (errno == EINTR) continue; throw std::system_error(errno, std::generic_category()); }
-    if (descriptors[0].revents & POLLIN) { signalfd_siginfo info{}; (void)read(signal_fd.get(), &info, sizeof(info)); logger_private->info("shutdown requested"); return 0; }
-    if (descriptors[1].revents & POLLIN) {
-      std::uint64_t expirations{}; (void)read(timer_fd.get(), &expirations, sizeof(expirations));
-      try { reconcile(); } catch (const std::exception& error) { logger_private->error(error.what()); }
-    }
+  shutdown_requested = 0;
+  struct sigaction action {};
+  action.sa_handler = request_shutdown;
+  sigemptyset(&action.sa_mask);
+  if (sigaction(SIGINT, &action, nullptr) < 0 || sigaction(SIGTERM, &action, nullptr) < 0) {
+    throw std::system_error(errno, std::generic_category());
   }
-}
-}
 
+  sigset_t shutdown_signals;
+  sigemptyset(&shutdown_signals);
+  sigaddset(&shutdown_signals, SIGINT);
+  sigaddset(&shutdown_signals, SIGTERM);
+  sigset_t wait_mask;
+  if (sigprocmask(SIG_BLOCK, &shutdown_signals, &wait_mask) < 0) {
+    throw std::system_error(errno, std::generic_category());
+  }
+
+  try { reconcile(); } catch (const std::exception& error) { logger_private->error(error.what()); }
+
+  auto next_run = std::chrono::steady_clock::now() + cadence_private;
+  while (!shutdown_requested) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= next_run) {
+      try { reconcile(); } catch (const std::exception& error) { logger_private->error(error.what()); }
+      next_run = std::chrono::steady_clock::now() + cadence_private;
+      continue;
+    }
+
+    const auto timeout = to_timespec(next_run - now);
+    const int result = pselect(0, nullptr, nullptr, nullptr, &timeout, &wait_mask);
+    if (result < 0 && errno != EINTR) throw std::system_error(errno, std::generic_category());
+  }
+  logger_private->info("shutdown requested");
+  return 0;
+}
+}
