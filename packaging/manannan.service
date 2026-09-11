@@ -1,0 +1,23 @@
+[Unit]
+Description=Manannan registry updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/manannan /usr/local/etc/manannan/manannan.yaml
+Restart=on-failure
+RestartSec=10s
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+EnvironmentFile=-/usr/local/etc/manannan/environment
+
+[Install]
+WantedBy=multi-user.target
